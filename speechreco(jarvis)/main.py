@@ -1,27 +1,90 @@
+"""main.py – Jarvis Speech Assistant (API keys now loaded from .env)
+---------------------------------------------------------------
+• Requires: python-dotenv, SpeechRecognition, pyttsx3, requests, google‑generativeai
+• Add the following to a `.env` file **never committed to Git**:
+    GEMINI_API_KEY=your_gemini_key_here
+    NEWS_API_KEY=your_newsapi_key_here
+
+Optionally (for client.py):
+    OPENAI_API_KEY=your_openai_key_here
+"""
+
+import os
+from dotenv import load_dotenv
 import speech_recognition as sr
 import pyttsx3
 import webbrowser
-import musiclib  # Ensure this file contains: music = { "songname": "url", ... }
 import requests
+import musiclib  # music = {"songname": "url", ...}
 import google.generativeai as genai
 
-# Configure Gemini API
-genai.configure(api_key="AIzaSyB3EUbj0TDkLl5ISF4ar6IQl_6R9lbGsrM")
-model = genai.GenerativeModel('gemini-pro')
+# ---------------------------------------------------------------------------
+# Environment & API keys
+# ---------------------------------------------------------------------------
+load_dotenv()                        # Loads variables from .env
+GEMINI_API_KEY = os.getenv("GEMINI_API_KEY")
+NEWS_API_KEY = os.getenv("NEWS_API_KEY")
 
+if not GEMINI_API_KEY or not NEWS_API_KEY:
+    raise RuntimeError("Missing GEMINI_API_KEY or NEWS_API_KEY in environment")
+
+# Configure Gemini
+genai.configure(api_key=GEMINI_API_KEY)
+model = genai.GenerativeModel("gemini-pro")
+
+# ---------------------------------------------------------------------------
+# Text‑to‑speech & speech‑to‑text setup
+# ---------------------------------------------------------------------------
 recognizer = sr.Recognizer()
 engine = pyttsx3.init()
-newsapi = "7a5aecdd990e498ea8e5982fbb72a965"
 
-def speak(text):
+def speak(text: str) -> None:
+    """Convert text to speech."""
     engine.say(text)
     engine.runAndWait()
 
-def generate_response(prompt):
+def generate_response(prompt: str) -> str:
+    """Use Gemini to generate a natural‑language reply."""
     response = model.generate_content(prompt)
     return response.text
 
-def processcommand(command):
+# ---------------------------------------------------------------------------
+# Command handling
+# ---------------------------------------------------------------------------
+
+def fetch_news() -> None:
+    """Read aloud the latest Tesla‑related headlines (top 5)."""
+    url = (
+        "https://newsapi.org/v2/everything?"  # NewsAPI endpoint
+        "q=tesla&sortBy=publishedAt&"          # query + sort
+        f"apiKey={NEWS_API_KEY}"
+    )
+    try:
+        r = requests.get(url, timeout=10)
+        r.raise_for_status()
+        articles = r.json().get("articles", [])[:5]
+        if not articles:
+            speak("I couldn't find any Tesla news at the moment.")
+            return
+        for article in articles:
+            speak(article["title"])
+    except Exception as exc:
+        speak(f"Sorry, I couldn't reach the news service: {exc}")
+
+
+def play_music(command: str) -> None:
+    """Attempt to play a requested song from musiclib.music."""
+    words = command.split()
+    for word in words:
+        if word in musiclib.music:
+            speak(f"Playing {word}")
+            webbrowser.open(musiclib.music[word])
+            return
+    speak("Sorry, I don't know that song.")
+
+
+def process_command(command: str) -> None:
+    """Main command router."""
     command = command.lower()
 
     if "open google" in command:
@@ -50,41 +113,30 @@ def processcommand(command):
 
     elif "what is your name" in command:
         speak("I am Jarvis, your personal assistant.")
-    
+
     elif "how are you" in command:
         speak("I am Jarvis, I am fine.")
-    
+
     elif "tell me the news" in command:
-        r = requests.get(
-            f"https://newsapi.org/v2/everything?q=tesla&from=2025-05-09&sortBy=publishedAt&apiKey={newsapi}"
-        )
-        if r.status_code == 200:
-            data = r.json()
-            articles = data.get("articles", [])
-            for article in articles[:5]:
-                speak(article['title'])
+        fetch_news()
 
     elif "play" in command and "music" in command:
-        speak("Which song would you like me to play?")
-        words = command.split()
-        for word in words:
-            if word in musiclib.music:
-                speak(f"Playing {word}")
-                webbrowser.open(musiclib.music[word])
-                return
-        speak("Sorry, I don't know that song.")
+        play_music(command)
 
     else:
-        # Let Gemini handle unknown commands
-        speak("I'm not sure how to handle that. Let me think...")
+        speak("I'm not sure how to handle that. Let me think…")
         response = generate_response(command)
         print("Gemini Response:", response)
         speak(response)
 
+# ---------------------------------------------------------------------------
+# Main loop
+# ---------------------------------------------------------------------------
+
 if __name__ == "__main__":
-    speak("Initializing Jarvis, please wait...")
+    speak("Initializing Jarvis, please wait…")
     while True:
-        print("Recognizing...")
+        print("Recognizing…")
         try:
             with sr.Microphone() as source:
                 print("Say something!")
@@ -94,10 +146,10 @@ if __name__ == "__main__":
             if word.lower() == "jarvis":
                 speak("Yes, how can I assist you?")
                 with sr.Microphone() as source:
-                    print("Listening for your command...")
+                    print("Listening for your command…")
                     audio = recognizer.listen(source)
                     command = recognizer.recognize_google(audio)
-                    processcommand(command)
+                    process_command(command)
 
         except Exception as e:
             print(f"Error: {e}")
