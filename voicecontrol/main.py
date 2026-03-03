@@ -6,7 +6,7 @@ import pyttsx3
 import datetime
 import pyjokes
 
-WAKE_WORD = "fig"
+WAKE_WORD = "fig" 
 ENGINE = pyttsx3.init()
 RECOGNIZER = sr.Recognizer()
 MIC = sr.Microphone()
