@@ -6,70 +6,65 @@ import pyttsx3
 import datetime
 import pyjokes
 import urllib.parse
+import threading
+import os
+import wikipedia
+import json
 
 WAKE_WORD = "fig"
-EXIT_WORDS = ["exit", "quit", "stop", "shutdown"]
+MEMORY_FILE = "assistant_memory.json"
 
 ENGINE = pyttsx3.init()
 RECOGNIZER = sr.Recognizer()
 MIC = sr.Microphone()
 
-# ------------------------
-# Voice Settings
-# ------------------------
-ENGINE.setProperty("rate", 170)
+ENGINE.setProperty("rate", 175)
 
-voices = ENGINE.getProperty("voices")
-if len(voices) > 1:
-    ENGINE.setProperty("voice", voices[1].id)
+# -------------------------
+# Memory System
+# -------------------------
+def load_memory():
+    if os.path.exists(MEMORY_FILE):
+        with open(MEMORY_FILE, "r") as f:
+            return json.load(f)
+    return {}
 
-# ------------------------
-# Known Websites
-# ------------------------
-SITE_ALIASES = {
-    "youtube": "https://www.youtube.com",
-    "twitter": "https://twitter.com",
-    "x": "https://twitter.com",
-    "github": "https://github.com",
-    "stackoverflow": "https://stackoverflow.com",
-    "chatgpt": "https://chat.openai.com",
-    "linkedin": "https://www.linkedin.com",
-    "gmail": "https://mail.google.com",
-    "google": "https://www.google.com",
-    "reddit": "https://www.reddit.com"
-}
+def save_memory(data):
+    with open(MEMORY_FILE, "w") as f:
+        json.dump(data, f)
 
-# ------------------------
-# Speak Function
-# ------------------------
-def speak(text: str):
-    print("Assistant:", text)
-    ENGINE.say(text)
-    ENGINE.runAndWait()
+MEMORY = load_memory()
 
-# ------------------------
+# -------------------------
+# Speak (Non-blocking)
+# -------------------------
+def speak(text):
+    def run():
+        print("Assistant:", text)
+        ENGINE.say(text)
+        ENGINE.runAndWait()
+
+    threading.Thread(target=run).start()
+
+# -------------------------
 # Command Parsing
-# ------------------------
-def parse_command(cmd: str):
+# -------------------------
+def parse_command(cmd):
     cmd = cmd.lower().strip()
 
-    if not cmd.startswith(WAKE_WORD):
+    if WAKE_WORD not in cmd:
         return None
 
     cmd = cmd.replace(WAKE_WORD, "", 1).strip()
 
-    if any(word in cmd for word in EXIT_WORDS):
+    if "exit" in cmd or "shutdown assistant" in cmd:
         return ("exit",)
 
     if cmd.startswith("open"):
         return ("open", cmd.replace("open", "", 1).strip())
 
     if cmd.startswith("search"):
-        match = re.match(r"search\s+(.+?)(?:\s+on\s+(google|duckduckgo|bing))?$", cmd)
-        if match:
-            query = match.group(1)
-            engine = match.group(2) or "google"
-            return ("search", query, engine)
+        return ("search", cmd.replace("search", "", 1).strip())
 
     if "joke" in cmd:
         return ("joke",)
@@ -80,38 +75,37 @@ def parse_command(cmd: str):
     if "weather" in cmd:
         return ("weather",)
 
-    if "help" in cmd:
-        return ("help",)
+    if "who is" in cmd or "what is" in cmd:
+        return ("wiki", cmd)
 
-    return None
+    if "my name is" in cmd:
+        return ("remember_name", cmd.replace("my name is", "").strip())
 
-# ------------------------
+    if "what is my name" in cmd:
+        return ("recall_name",)
+
+    if "shutdown computer" in cmd:
+        return ("shutdown_pc",)
+
+    if "restart computer" in cmd:
+        return ("restart_pc",)
+
+    return ("fallback", cmd)
+
+# -------------------------
 # Features
-# ------------------------
-def open_site(site_raw: str):
-    site_raw = site_raw.strip()
+# -------------------------
+def open_site(site):
+    if not site.startswith("http"):
+        site = "https://" + site
+    speak(f"Opening {site}")
+    webbrowser.open(site)
 
-    if site_raw in SITE_ALIASES:
-        url = SITE_ALIASES[site_raw]
-    else:
-        if not site_raw.startswith("http"):
-            site_raw = "https://" + site_raw
-        url = site_raw
-
-    speak(f"Opening {site_raw}")
+def search_web(query):
+    encoded = urllib.parse.quote(query)
+    url = f"https://www.google.com/search?q={encoded}"
+    speak(f"Searching for {query}")
     webbrowser.open(url)
-
-def search_web(query: str, engine: str):
-    encoded_query = urllib.parse.quote(query)
-
-    url_map = {
-        "google": f"https://www.google.com/search?q={encoded_query}",
-        "duckduckgo": f"https://duckduckgo.com/?q={encoded_query}",
-        "bing": f"https://www.bing.com/search?q={encoded_query}",
-    }
-
-    speak(f"Searching for {query} on {engine}")
-    webbrowser.open(url_map.get(engine, url_map["google"]))
 
 def tell_time():
     now = datetime.datetime.now().strftime("%I:%M %p")
@@ -121,25 +115,49 @@ def tell_joke():
     speak(pyjokes.get_joke())
 
 def show_weather():
-    speak("Opening weather details for you.")
+    speak("Opening weather report.")
     webbrowser.open("https://www.google.com/search?q=weather+today")
 
-def show_help():
-    speak("You can say: fig open youtube, fig search AI on google, fig joke, fig time, fig weather, or fig exit.")
+def wikipedia_search(query):
+    try:
+        result = wikipedia.summary(query, sentences=2)
+        speak(result)
+    except:
+        speak("Sorry, I couldn't find anything.")
 
-# ------------------------
-# Listening Loop
-# ------------------------
+def remember_name(name):
+    MEMORY["name"] = name
+    save_memory(MEMORY)
+    speak(f"Nice to meet you {name}. I will remember that.")
+
+def recall_name():
+    name = MEMORY.get("name")
+    if name:
+        speak(f"Your name is {name}.")
+    else:
+        speak("I don't know your name yet.")
+
+def shutdown_pc():
+    speak("Shutting down the computer.")
+    os.system("shutdown /s /t 1")
+
+def restart_pc():
+    speak("Restarting the computer.")
+    os.system("shutdown /r /t 1")
+
+# -------------------------
+# Main Loop
+# -------------------------
 def listen_loop():
-    speak("Voice assistant is ready. Say fig followed by your command.")
+    speak("Advanced voice assistant is ready.")
 
     with MIC as source:
-        RECOGNIZER.adjust_for_ambient_noise(source, duration=1)
+        RECOGNIZER.adjust_for_ambient_noise(source)
 
         while True:
             try:
                 print("Listening...")
-                audio = RECOGNIZER.listen(source, timeout=5, phrase_time_limit=6)
+                audio = RECOGNIZER.listen(source, timeout=5, phrase_time_limit=7)
                 transcript = RECOGNIZER.recognize_google(audio)
                 print("Heard:", transcript)
 
@@ -151,32 +169,39 @@ def listen_loop():
                 match result:
                     case ("open", site):
                         open_site(site)
-                    case ("search", query, engine):
-                        search_web(query, engine)
+                    case ("search", query):
+                        search_web(query)
                     case ("joke",):
                         tell_joke()
                     case ("time",):
                         tell_time()
                     case ("weather",):
                         show_weather()
-                    case ("help",):
-                        show_help()
+                    case ("wiki", query):
+                        wikipedia_search(query)
+                    case ("remember_name", name):
+                        remember_name(name)
+                    case ("recall_name",):
+                        recall_name()
+                    case ("shutdown_pc",):
+                        shutdown_pc()
+                    case ("restart_pc",):
+                        restart_pc()
                     case ("exit",):
-                        speak("Shutting down. Goodbye.")
+                        speak("Goodbye.")
                         break
-                    case _:
-                        speak("Sorry, I didn't understand that.")
+                    case ("fallback", query):
+                        search_web(query)
 
             except sr.WaitTimeoutError:
                 continue
             except sr.UnknownValueError:
-                print("Could not understand audio.")
+                print("Didn't understand.")
             except Exception as e:
                 print("Error:", e)
                 speak("Something went wrong.")
-            
+
             time.sleep(0.5)
 
-# ------------------------
 if __name__ == "__main__":
     listen_loop()
