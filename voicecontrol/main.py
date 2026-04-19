@@ -249,3 +249,53 @@ def listen_loop():
 
                     case ("search", query):
                         search_web(query)
+                        
+                    case ("joke",):
+                        tell_joke()
+
+                    case ("time",):
+                        tell_time()
+
+                    case ("weather",):
+                        show_weather()
+
+                    case ("wiki", query):
+                        wikipedia_search(query)
+
+                    case ("remember_name", name):
+                        remember_name(name)
+
+                    case ("recall_name",):
+                        recall_name()
+
+                    case ("shutdown_pc",):
+                        shutdown_pc()
+
+                    case ("restart_pc",):
+                        restart_pc()
+
+                    case ("fallback", query):
+                        search_web(query)
+
+                    case ("exit",):
+                        speak("Goodbye. Nova shutting down.")
+                        break
+
+            except sr.WaitTimeoutError:
+                continue
+
+            except sr.UnknownValueError:
+                print("Didn't understand")
+
+            except Exception as e:
+                print("Error:", e)
+                speak("Something went wrong")
+
+            time.sleep(0.5)
+
+# =========================
+# START PROGRAM
+# =========================
+
+if __name__ == "__main__":
+    listen_loop()
