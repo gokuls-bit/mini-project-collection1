@@ -11,7 +11,11 @@ import os
 import wikipedia
 import json
 
-WAKE_WORD = "fig"
+# =========================
+# CONFIGURATION
+# =========================
+
+WAKE_WORD = "nova"
 MEMORY_FILE = "assistant_memory.json"
 
 ENGINE = pyttsx3.init()
@@ -20,9 +24,10 @@ MIC = sr.Microphone()
 
 ENGINE.setProperty("rate", 175)
 
-# -------------------------
-# Memory System
-# -------------------------
+# =========================
+# MEMORY SYSTEM
+# =========================
+
 def load_memory():
     if os.path.exists(MEMORY_FILE):
         with open(MEMORY_FILE, "r") as f:
@@ -35,21 +40,24 @@ def save_memory(data):
 
 MEMORY = load_memory()
 
-# -------------------------
-# Speak (Non-blocking)
-# -------------------------
+# =========================
+# SPEAK FUNCTION (NON-BLOCKING)
+# =========================
+
 def speak(text):
     def run():
-        print("Assistant:", text)
+        print("NOVA:", text)
         ENGINE.say(text)
         ENGINE.runAndWait()
 
     threading.Thread(target=run).start()
 
-# -------------------------
-# Command Parsing
-# -------------------------
+# =========================
+# COMMAND PARSER
+# =========================
+
 def parse_command(cmd):
+
     cmd = cmd.lower().strip()
 
     if WAKE_WORD not in cmd:
@@ -57,14 +65,26 @@ def parse_command(cmd):
 
     cmd = cmd.replace(WAKE_WORD, "", 1).strip()
 
-    if "exit" in cmd or "shutdown assistant" in cmd:
+    if "exit" in cmd:
         return ("exit",)
+
+    if "open youtube" in cmd:
+        return ("youtube",)
+
+    if "open google" in cmd:
+        return ("google",)
 
     if cmd.startswith("open"):
         return ("open", cmd.replace("open", "", 1).strip())
 
     if cmd.startswith("search"):
         return ("search", cmd.replace("search", "", 1).strip())
+
+    if "play music" in cmd:
+        return ("music",)
+
+    if "system info" in cmd:
+        return ("system",)
 
     if "joke" in cmd:
         return ("joke",)
@@ -92,14 +112,31 @@ def parse_command(cmd):
 
     return ("fallback", cmd)
 
-# -------------------------
-# Features
-# -------------------------
+# =========================
+# FEATURES
+# =========================
+
 def open_site(site):
     if not site.startswith("http"):
         site = "https://" + site
     speak(f"Opening {site}")
     webbrowser.open(site)
+
+def open_youtube():
+    speak("Opening YouTube")
+    webbrowser.open("https://youtube.com")
+
+def open_google():
+    speak("Opening Google")
+    webbrowser.open("https://google.com")
+
+def play_music():
+    speak("Playing music")
+    os.system("start wmplayer")
+
+def system_info():
+    speak("Opening system information")
+    os.system("systeminfo")
 
 def search_web(query):
     encoded = urllib.parse.quote(query)
@@ -115,7 +152,7 @@ def tell_joke():
     speak(pyjokes.get_joke())
 
 def show_weather():
-    speak("Opening weather report.")
+    speak("Opening weather report")
     webbrowser.open("https://www.google.com/search?q=weather+today")
 
 def wikipedia_search(query):
@@ -123,41 +160,68 @@ def wikipedia_search(query):
         result = wikipedia.summary(query, sentences=2)
         speak(result)
     except:
-        speak("Sorry, I couldn't find anything.")
+        speak("Sorry, I could not find anything")
 
 def remember_name(name):
     MEMORY["name"] = name
     save_memory(MEMORY)
-    speak(f"Nice to meet you {name}. I will remember that.")
+    speak(f"Nice to meet you {name}. I will remember that")
 
 def recall_name():
     name = MEMORY.get("name")
     if name:
-        speak(f"Your name is {name}.")
+        speak(f"Your name is {name}")
     else:
-        speak("I don't know your name yet.")
+        speak("I do not know your name yet")
 
 def shutdown_pc():
-    speak("Shutting down the computer.")
+    speak("Shutting down the computer")
     os.system("shutdown /s /t 1")
 
 def restart_pc():
-    speak("Restarting the computer.")
+    speak("Restarting the computer")
     os.system("shutdown /r /t 1")
 
-# -------------------------
-# Main Loop
-# -------------------------
+# =========================
+# GREETING SYSTEM
+# =========================
+
+def greet_user():
+
+    hour = datetime.datetime.now().hour
+
+    if hour < 12:
+        speak("Good morning. Nova AI is online.")
+
+    elif hour < 18:
+        speak("Good afternoon. Nova AI is ready.")
+
+    else:
+        speak("Good evening. Nova AI at your service.")
+
+# =========================
+# MAIN LOOP
+# =========================
+
 def listen_loop():
-    speak("Advanced voice assistant is ready.")
+
+    greet_user()
 
     with MIC as source:
+
         RECOGNIZER.adjust_for_ambient_noise(source)
 
         while True:
+
             try:
+
                 print("Listening...")
-                audio = RECOGNIZER.listen(source, timeout=5, phrase_time_limit=7)
+                audio = RECOGNIZER.listen(
+                    source,
+                    timeout=5,
+                    phrase_time_limit=7
+                )
+
                 transcript = RECOGNIZER.recognize_google(audio)
                 print("Heard:", transcript)
 
@@ -167,41 +231,21 @@ def listen_loop():
                     continue
 
                 match result:
+
                     case ("open", site):
                         open_site(site)
+
+                    case ("youtube",):
+                        open_youtube()
+
+                    case ("google",):
+                        open_google()
+
+                    case ("music",):
+                        play_music()
+
+                    case ("system",):
+                        system_info()
+
                     case ("search", query):
                         search_web(query)
-                    case ("joke",):
-                        tell_joke()
-                    case ("time",):
-                        tell_time()
-                    case ("weather",):
-                        show_weather()
-                    case ("wiki", query):
-                        wikipedia_search(query)
-                    case ("remember_name", name):
-                        remember_name(name)
-                    case ("recall_name",):
-                        recall_name()
-                    case ("shutdown_pc",):
-                        shutdown_pc()
-                    case ("restart_pc",):
-                        restart_pc()
-                    case ("exit",):
-                        speak("Goodbye.")
-                        break
-                    case ("fallback", query):
-                        search_web(query)
-
-            except sr.WaitTimeoutError:
-                continue
-            except sr.UnknownValueError:
-                print("Didn't understand.")
-            except Exception as e:
-                print("Error:", e)
-                speak("Something went wrong.")
-
-            time.sleep(0.5)
-
-if __name__ == "__main__":
-    listen_loop()
