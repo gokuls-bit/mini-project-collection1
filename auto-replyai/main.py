@@ -10,7 +10,6 @@ import os
 recognizer = sr.Recognizer()
 engine = pyttsx3.init()
 
-# Set buzzword
 BUZZWORD = "radha"
 
 # Configure TTS voice
